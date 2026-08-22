@@ -1,12 +1,23 @@
-const axios = require("axios"),
-  Anthropic = require("@anthropic-ai/sdk"),
-  OpenAI = require("openai"),
-  cheerio = require("cheerio");
+const axios = require("axios");
+const { GoogleGenAI } = require("@google/genai");
+const cheerio = require("cheerio");
 const { unavailable } = require("./utils");
+
 const model = {
   provider: "huggingface",
   name: "dima806/deepfake_vs_real_image_detection",
 };
+
+function getGeminiClient() {
+  if (!process.env.GEMINI_API_KEY) {
+    throw Object.assign(
+      new Error("GEMINI_API_KEY is required for Gemini services"),
+      { code: "GEMINI_NOT_CONFIGURED" },
+    );
+  }
+  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+}
+
 async function analyzeMedia(fileUrl) {
   if (!process.env.HF_TOKEN || !fileUrl)
     return {
@@ -56,19 +67,22 @@ async function analyzeMedia(fileUrl) {
     return { ...unavailable("FORENSIC_UNAVAILABLE"), model, score: null };
   }
 }
+
 async function generateEmbedding(text) {
-  if (!process.env.OPENAI_API_KEY)
-    throw Object.assign(
-      new Error("OPENAI_API_KEY is required for embeddings"),
-      { code: "EMBEDDINGS_NOT_CONFIGURED" },
-    );
-  const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  const r = await client.embeddings.create({
-    model: "text-embedding-3-small",
-    input: text,
+  const ai = getGeminiClient();
+  const r = await ai.models.embedContent({
+    model: "gemini-embedding-001",
+    contents: text,
   });
-  return r.data[0].embedding;
+  const embedding = r.embeddings?.[0]?.values;
+  if (!Array.isArray(embedding)) {
+    throw Object.assign(new Error("Gemini embedding response was invalid"), {
+      code: "EMBEDDINGS_INVALID",
+    });
+  }
+  return embedding;
 }
+
 async function extractUrl(url) {
   try {
     const r = await axios.get(url, {
@@ -96,23 +110,28 @@ async function extractUrl(url) {
     return unavailable("PAGE_FETCH_FAILED");
   }
 }
+
 async function synthesize({ claim, evidence, sources, score }) {
-  if (!process.env.CLAUDE_API_KEY)
-    return {
-      summary:
-        "AI synthesis unavailable. Review the evidence trail and source corroboration below.",
-      reasoning: ["The report uses the available evidence signals only."],
-      evidenceTrail: evidence,
-    };
   try {
-    const client = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
-    const prompt = `Return JSON only with summary, reasoning (brief evidence-grounded bullets), evidenceTrail. Do not invent sources, metadata, or results. Claim: ${claim}. Score: ${JSON.stringify(score)}. Evidence: ${JSON.stringify(evidence)}. Sources: ${JSON.stringify(sources.map((s) => ({ title: s.title, url: s.url, publisher: s.publisher })))}`;
-    const r = await client.messages.create({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 800,
-      messages: [{ role: "user", content: prompt }],
+    const ai = getGeminiClient();
+    const prompt = `Return JSON only with summary, reasoning (brief evidence-grounded bullets), and evidenceTrail. Do not invent sources, metadata, or results. Claim: ${claim}. Score: ${JSON.stringify(score)}. Evidence: ${JSON.stringify(evidence)}. Sources: ${JSON.stringify(sources.map((s) => ({ title: s.title, url: s.url, publisher: s.publisher })))}`;
+    const r = await ai.models.generateContent({
+      model: "gemini-3.7-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "object",
+          properties: {
+            summary: { type: "string" },
+            reasoning: { type: "array", items: { type: "string" } },
+            evidenceTrail: { type: "array", items: { type: "object" } },
+          },
+          required: ["summary", "reasoning", "evidenceTrail"],
+        },
+      },
     });
-    return JSON.parse(r.content[0].text.replace(/^```json|```$/g, ""));
+    return JSON.parse(r.text);
   } catch {
     return {
       summary:
@@ -122,6 +141,7 @@ async function synthesize({ claim, evidence, sources, score }) {
     };
   }
 }
+
 module.exports = {
   analyzeMedia,
   generateEmbedding,
