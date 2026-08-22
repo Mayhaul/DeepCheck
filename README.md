@@ -4,26 +4,25 @@ DeepCheck is a hybrid AI evidence-investigation system for checking claims and a
 
 ## Core idea
 
-A user provides a **claim/fact to verify** and can optionally upload supporting evidence such as a PDF or text document. DeepCheck then independently searches the live web/news and investigates the public history of the source making the claim.
+A user provides a **claim/fact to verify** and can optionally upload supporting evidence such as a PDF or text document. DeepCheck independently searches the live web and investigates the public history of the source making the claim.
 
 ```text
 Claim + User Evidence
         │
         ├── Document RAG ─────────┐
-        ├── Brave Web/News Search ├──> Evidence comparison ──> Gemini ──> Report
-        ├── Source-history search ┘
-        └── Media forensics / transcription when applicable
+        ├── Tavily Web/News Search ├──> Evidence comparison ──> Gemini ──> Report
+        └── Source-history search ┘
 ```
 
 ## Backend
 
-The Node.js/Express backend orchestrates the investigation. MongoDB Atlas stores investigations, reports, curated source embeddings, and per-investigation document chunks. Gemini provides embeddings and evidence synthesis. Brave Search provides live web/news retrieval. Hugging Face supplies the image-forensic signal. Cloudinary stores uploaded media/documents.
+The Node.js/Express backend orchestrates the investigation. MongoDB Atlas stores investigations, reports, curated source embeddings, and per-investigation document chunks. Gemini provides embeddings and evidence synthesis. Tavily provides live web/news retrieval. Media analysis services remain in the backend for later development but are **not exposed in the current frontend product**.
 
 ### RAG layers
 
-1. **Uploaded-document RAG:** documents are extracted, chunked, embedded with `gemini-embedding-2`, stored for the investigation, and searched against the claim.
+1. **Uploaded-document RAG:** documents are extracted, chunked, embedded with Gemini, stored for the investigation, and searched against the claim.
 2. **Curated knowledge-base RAG:** trusted/permissioned sources remain in MongoDB Atlas Vector Search.
-3. **Live web retrieval:** Brave Web + News Search supplies current independent evidence. Web results are not blindly persisted into the permanent corpus.
+3. **Live web retrieval:** Tavily Web/News Search supplies current independent evidence. Web results are not blindly persisted into the permanent corpus.
 
 ### Source credibility
 
@@ -36,14 +35,18 @@ The report keeps these concepts separate:
 - **Claim credibility**
 - **Source credibility**
 - **Evidence agreement**
-- **Forensic signal** when media is supplied
 - **Overall credibility score**
 - **Confidence level**
 - Evidence trail and source links
 
 ## Frontend
 
-The React + Vite frontend provides the investigation form, evidence upload, progress polling, and report UI. A user can submit a claim alone, claim + document, image/video/audio + claim, or an article URL + claim.
+The React + Vite frontend currently supports two investigation modes:
+
+- **Claim only**
+- **Claim + uploaded document**
+
+The frontend provides the investigation form, document upload, progress polling, and report UI. Image, video, and audio investigation modes are intentionally hidden for now and will be added later.
 
 ## Setup
 
@@ -81,7 +84,7 @@ VITE_DEMO_MODE=false
 PORT=5000
 MONGODB_URI=
 GEMINI_API_KEY=
-BRAVE_SEARCH_API_KEY=
+TAVILY_API_KEY=
 HF_TOKEN=
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
@@ -90,9 +93,7 @@ CLIENT_URL=http://localhost:5173
 DEMO_MODE=false
 ```
 
-Brave Search uses the `X-Subscription-Token` header and exposes separate web and news search endpoints. urlBrave Search API documentationhttps://api-dashboard.search.brave.com/api-reference/web/search/get
-
-Gemini 3.7 Flash is used for synthesis and Gemini Embedding 2 for the vector representations. Gemini Embedding 2 supports 1536-dimensional output, matching the configured Atlas vector-search dimension. citeturn1search1turn3search0
+Tavily is used as the live retrieval layer for web and news evidence. Gemini handles embeddings and evidence synthesis.
 
 ## API
 
