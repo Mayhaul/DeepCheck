@@ -3,6 +3,8 @@ import { BrowserRouter, Link, Route, Routes, useNavigate, useParams } from 'reac
 import { ArrowRight, Check, FileText, Globe2, Play, ShieldCheck, Sparkles, Upload } from 'lucide-react';
 import { demoCases } from './data/demoData';
 import { getReport, getInvestigationStatus, startAnalysis, submitInvestigation } from './services/api';
+import GradientWaves from './components/GradientWaves';
+import SpecularButton from './components/SpecularButton';
 
 const types = [
   ['text', 'Claim only', FileText],
@@ -33,7 +35,8 @@ function Header() {
   return (
     <header>
       <Link className="brand" to="/">
-        <i>S</i>DeepCheck
+        <img className="brand-logo" src="/fivicon.jpg" alt="" />
+        DeepCheck
       </Link>
       <nav>
         <Link to="/investigate">Investigate</Link>
@@ -45,6 +48,8 @@ function Header() {
 }
 
 function Landing() {
+  const navigate = useNavigate();
+
   return (
     <main>
       <section className="hero">
@@ -59,12 +64,12 @@ function Landing() {
           history of the source behind a claim.
         </p>
         <div className="actions">
-          <Link className="button primary" to="/investigate">
+          <SpecularButton className="primary" onClick={() => navigate('/investigate')} autoAnimate>
             Investigate a claim <ArrowRight size={16} />
-          </Link>
-          <Link className="button" to="/demo">
+          </SpecularButton>
+          <SpecularButton className="secondary" onClick={() => navigate('/demo')} autoAnimate>
             <Play size={14} /> Demo
-          </Link>
+          </SpecularButton>
         </div>
       </section>
 
@@ -374,14 +379,19 @@ function Demo() {
 export default function App() {
   return (
     <BrowserRouter>
-      <Header />
-      <Routes>
-        <Route path="/" element={<Landing />} />
-        <Route path="/investigate" element={<Investigate />} />
-        <Route path="/investigation/:id" element={<Investigation />} />
-        <Route path="/report/:id" element={<Report />} />
-        <Route path="/demo" element={<Demo />} />
-      </Routes>
+      <div className="app-shell">
+        <GradientWaves className="app-background" />
+        <div className="app-content">
+          <Header />
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/investigate" element={<Investigate />} />
+            <Route path="/investigation/:id" element={<Investigation />} />
+            <Route path="/report/:id" element={<Report />} />
+            <Route path="/demo" element={<Demo />} />
+          </Routes>
+        </div>
+      </div>
     </BrowserRouter>
   );
 }
