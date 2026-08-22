@@ -5,6 +5,7 @@
 ```powershell
 cd sattva-backend
 Copy-Item .env.example .env
+npm install
 npm.cmd run dev
 ```
 
@@ -12,7 +13,13 @@ Set `MONGODB_URI` for persistence. Set `DEMO_MODE=true` for controlled reports; 
 
 ## Environment
 
-`CLAUDE_API_KEY` enables concise, evidence-bounded synthesis. `OPENAI_API_KEY` enables `text-embedding-3-small` and corpus ingestion. `HF_TOKEN` enables the fixed `dima806/deepfake_vs_real_image_detection` inference model. Create an HF access token at Hugging Face Settings → Access Tokens and give it read access. Cloudinary variables are reserved for production file storage.
+`GEMINI_API_KEY` enables Gemini embeddings and evidence-bounded synthesis. `HF_TOKEN` enables the fixed `dima806/deepfake_vs_real_image_detection` inference model. Cloudinary variables are reserved for production file storage.
+
+## Gemini
+
+DeepCheck uses Google's official `@google/genai` SDK. `gemini-embedding-001` generates 1536-dimensional embeddings so they match the current Atlas Vector Search index. `gemini-3.7-flash` generates the evidence-bounded report synthesis.
+
+Get a Gemini API key from Google AI Studio and set it as `GEMINI_API_KEY` in `.env`. Keep the key server-side and never expose it in the frontend.
 
 ## Atlas Vector Search
 
@@ -24,7 +31,7 @@ Create a Vector Search index named `source_vector_index` on the `sources` collec
 }
 ```
 
-Atlas UI: Database → your cluster → Search → Create Search Index → JSON editor → select `sources`, name it `source_vector_index`, paste the JSON, and create. The OpenAI model above currently returns 1536 dimensions. Verify it in Atlas with `db.sources.aggregate([{ $listSearchIndexes: { name: "source_vector_index" } }])`. If the index is missing, the API reports `VECTOR_INDEX_NOT_READY`; it never pretends keyword search is vector search.
+Atlas UI: Database → your cluster → Search → Create Search Index → JSON editor → select `sources`, name it `source_vector_index`, paste the JSON, and create. The Gemini embedding configuration is explicitly reduced to 1536 dimensions to match this index. If the index is missing, the API reports `VECTOR_INDEX_NOT_READY`; it never pretends keyword search is vector search.
 
 ## Corpus ingestion
 
