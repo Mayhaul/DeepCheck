@@ -2,11 +2,7 @@ const mongoose = require("mongoose");
 
 const submissionSchema = new mongoose.Schema(
   {
-    type: {
-      type: String,
-      enum: ["image", "video", "audio", "text", "article_url", "document"],
-      required: true,
-    },
+    type: { type: String, enum: ["image", "video", "audio", "text", "article_url", "document"], required: true },
     claim: { type: String, required: true },
     sourceUrl: String,
     fileUrl: String,
@@ -21,19 +17,8 @@ const submissionSchema = new mongoose.Schema(
 
 const analysisSchema = new mongoose.Schema(
   {
-    submissionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Submission",
-      required: true,
-      unique: true,
-    },
-    scores: {
-      claimCredibility: Number,
-      sourceCredibility: Number,
-      evidenceAgreement: Number,
-      forensic: Number,
-      provenance: Number,
-    },
+    submissionId: { type: mongoose.Schema.Types.ObjectId, ref: "Submission", required: true, unique: true },
+    scores: { claimCredibility: Number, sourceCredibility: Number, evidenceAgreement: Number, forensic: Number, provenance: Number },
     credibilityScore: Number,
     confidenceLevel: String,
     verdict: String,
@@ -51,22 +36,12 @@ const analysisSchema = new mongoose.Schema(
 
 const reportSchema = new mongoose.Schema(
   {
-    submissionId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Submission",
-      unique: true,
-    },
+    submissionId: { type: mongoose.Schema.Types.ObjectId, ref: "Submission", unique: true },
     summary: String,
     verdict: String,
     credibilityScore: Number,
     confidenceLevel: String,
-    scores: {
-      claimCredibility: Number,
-      sourceCredibility: Number,
-      evidenceAgreement: Number,
-      forensic: Number,
-      provenance: Number,
-    },
+    scores: { claimCredibility: Number, sourceCredibility: Number, evidenceAgreement: Number, forensic: Number, provenance: Number },
     evidenceTrail: [Object],
     uploadedDocument: Object,
     webEvidence: Object,
@@ -94,9 +69,22 @@ const sourceSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
+const documentChunkSchema = new mongoose.Schema(
+  {
+    submissionId: { type: mongoose.Schema.Types.ObjectId, ref: "Submission", required: true, index: true },
+    chunkIndex: { type: Number, required: true },
+    text: { type: String, required: true },
+    embedding: { type: [Number], required: true },
+  },
+  { timestamps: true },
+);
+
+documentChunkSchema.index({ submissionId: 1, chunkIndex: 1 }, { unique: true });
+
 module.exports = {
   Submission: mongoose.model("Submission", submissionSchema),
   Analysis: mongoose.model("Analysis", analysisSchema),
   Report: mongoose.model("Report", reportSchema),
   Source: mongoose.model("Source", sourceSchema),
+  DocumentChunk: mongoose.model("DocumentChunk", documentChunkSchema),
 };
