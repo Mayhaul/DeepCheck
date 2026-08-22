@@ -1,0 +1,27 @@
+function assessSourceCredibility(history, publisher) {
+  if (!history?.available) {
+    return {
+      available: false,
+      publisher: publisher || "Unknown source",
+      score: null,
+      confidence: "LOW",
+      explanation: "No reliable source-history evidence was available.",
+    };
+  }
+  const score = history.signals?.historyScore ?? null;
+  return {
+    available: true,
+    publisher: publisher || "Unknown source",
+    score,
+    confidence: history.results.length >= 5 ? "MEDIUM" : "LOW",
+    negativeReports: history.signals?.negativeReports || 0,
+    positiveSignals: history.signals?.positiveSignals || 0,
+    explanation:
+      score == null
+        ? "The search returned insufficient source-history evidence."
+        : "This score reflects searched historical signals and should not be treated as proof that the current claim is false or true.",
+    sources: history.results,
+  };
+}
+
+module.exports = { assessSourceCredibility };
