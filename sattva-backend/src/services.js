@@ -3,109 +3,65 @@ const { GoogleGenAI } = require("@google/genai");
 const cheerio = require("cheerio");
 const { unavailable } = require("./utils");
 
-const model = {
+const forensicModel = {
   provider: "huggingface",
   name: "dima806/deepfake_vs_real_image_detection",
 };
 
 function getGeminiClient() {
-  if (!process.env.GEMINI_API_KEY) {
-    throw Object.assign(
-      new Error("GEMINI_API_KEY is required for Gemini services"),
-      { code: "GEMINI_NOT_CONFIGURED" },
-    );
-  }
+  if (!process.env.GEMINI_API_KEY)
+    throw Object.assign(new Error("GEMINI_API_KEY is required"), { code: "GEMINI_NOT_CONFIGURED" });
   return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 }
 
 async function analyzeMedia(fileUrl) {
   if (!process.env.HF_TOKEN || !fileUrl)
-    return {
-      ...unavailable(!fileUrl ? "MEDIA_UNAVAILABLE" : "HF_NOT_CONFIGURED"),
-      model,
-      score: null,
-    };
+    return { ...unavailable(!fileUrl ? "MEDIA_UNAVAILABLE" : "HF_NOT_CONFIGURED"), model: forensicModel, score: null };
   try {
-    const image = await axios.get(fileUrl, {
-      responseType: "arraybuffer",
-      timeout: 20000,
-    });
-    const res = await axios.post(
+    const image = await axios.get(fileUrl, { responseType: "arraybuffer", timeout: 20000 });
+    const response = await axios.post(
       "https://router.huggingface.co/hf-inference/models/dima806/deepfake_vs_real_image_detection",
       image.data,
-      {
-        headers: {
-          Authorization: `Bearer ${process.env.HF_TOKEN}`,
-          "Content-Type": "application/octet-stream",
-        },
-        timeout: 30000,
-      },
+      { headers: { Authorization: `Bearer ${process.env.HF_TOKEN}`, "Content-Type": "application/octet-stream" }, timeout: 30000 },
     );
-    const labels = Array.isArray(res.data) ? res.data : [];
+    const labels = Array.isArray(response.data) ? response.data : [];
     const fake = labels.find((x) => String(x.label).toLowerCase() === "fake");
-    if (!fake)
-      return {
-        ...unavailable("FORENSIC_RESPONSE_INVALID"),
-        model,
-        score: null,
-      };
+    if (!fake) return { ...unavailable("FORENSIC_RESPONSE_INVALID"), model: forensicModel, score: null };
     return {
       available: true,
       score: Math.round((1 - fake.score) * 100),
       confidence: fake.score,
-      model,
-      indicators: [
-        {
-          name: "frame_level_fake_signal",
-          severity: fake.score > 0.7 ? "high" : "medium",
-          confidence: fake.score,
-        },
-      ],
+      model: forensicModel,
+      indicators: [{ name: "frame_level_fake_signal", severity: fake.score > 0.7 ? "high" : "medium", confidence: fake.score }],
       framesAnalyzed: 1,
     };
   } catch {
-    return { ...unavailable("FORENSIC_UNAVAILABLE"), model, score: null };
+    return { ...unavailable("FORENSIC_UNAVAILABLE"), model: forensicModel, score: null };
   }
 }
 
 async function generateEmbedding(text) {
   const ai = getGeminiClient();
-  const r = await ai.models.embedContent({
-    model: "gemini-embedding-001",
+  const result = await ai.models.embedContent({
+    model: "gemini-embedding-2",
     contents: text,
-    config: {
-      outputDimensionality: 1536,
-    },
+    config: { outputDimensionality: 1536 },
   });
-  const embedding = r.embeddings?.[0]?.values;
-  if (!Array.isArray(embedding)) {
-    throw Object.assign(new Error("Gemini embedding response was invalid"), {
-      code: "EMBEDDINGS_INVALID",
-    });
-  }
+  const embedding = result.embeddings?.[0]?.values;
+  if (!Array.isArray(embedding)) throw Object.assign(new Error("Gemini embedding response was invalid"), { code: "EMBEDDINGS_INVALID" });
   return embedding;
 }
 
 async function extractUrl(url) {
   try {
-    const r = await axios.get(url, {
-      timeout: 15000,
-      headers: { "User-Agent": "SattvaResearchBot/1.0" },
-      maxContentLength: 2_000_000,
-    });
-    const $ = cheerio.load(r.data);
+    const response = await axios.get(url, { timeout: 15000, headers: { "User-Agent": "DeepCheckResearchBot/1.0" }, maxContentLength: 2000000 });
+    const $ = cheerio.load(response.data);
     const content = $("article").text() || $("main").text() || $("body").text();
     return {
       available: true,
-      title:
-        $('meta[property="og:title"]').attr("content") ||
-        $("title").text() ||
-        null,
-      publisher:
-        $('meta[property="og:site_name"]').attr("content") ||
-        new URL(url).hostname,
-      publishedAt:
-        $('meta[property="article:published_time"]').attr("content") || null,
+      title: $('meta[property="og:title"]').attr("content") || $("title").text() || null,
+      publisher: $('meta[property="og:site_name"]').attr("content") || new URL(url).hostname,
+      publishedAt: $('meta[property="article:published_time"]').attr("content") || null,
       content: content.replace(/\s+/g, " ").trim().slice(0, 30000),
       url,
     };
@@ -114,11 +70,11 @@ async function extractUrl(url) {
   }
 }
 
-async function synthesize({ claim, evidence, sources, score }) {
+async function synthesize({ claim, uploadedDocument, webEvidence, sourceProfile, knowledgeBase, forensic, transcript }) {
   try {
     const ai = getGeminiClient();
-    const prompt = `Return JSON only with summary, reasoning (brief evidence-grounded bullets), and evidenceTrail. Do not invent sources, metadata, or results. Claim: ${claim}. Score: ${JSON.stringify(score)}. Evidence: ${JSON.stringify(evidence)}. Sources: ${JSON.stringify(sources.map((s) => ({ title: s.title, url: s.url, publisher: s.publisher })))}`;
-    const r = await ai.models.generateContent({
+    const prompt = `You are DeepCheck, an evidence-analysis system. Assess the claim using ONLY the supplied evidence. Do not invent facts, sources, history, or certainty. Keep claim credibility separate from source credibility. A source having a poor history does NOT prove the current claim false. Return JSON only.\n\nCLAIM:\n${claim}\n\nUPLOADED DOCUMENT RAG:\n${JSON.stringify(uploadedDocument)}\n\nLIVE WEB SEARCH:\n${JSON.stringify(webEvidence)}\n\nSOURCE CREDIBILITY HISTORY:\n${JSON.stringify(sourceProfile)}\n\nCURATED KNOWLEDGE BASE:\n${JSON.stringify(knowledgeBase)}\n\nFORENSIC SIGNAL:\n${JSON.stringify(forensic)}\n\nTRANSCRIPT:\n${JSON.stringify(transcript)}\n\nReturn: verdict, claimCredibility (0-100), evidenceAgreement (0-100), summary, reasoning (array), evidenceTrail (array). Verdict must be SUPPORTED, LIKELY_FALSE, MIXED, or INSUFFICIENT_EVIDENCE.`;
+    const result = await ai.models.generateContent({
       model: "gemini-3.7-flash",
       contents: prompt,
       config: {
@@ -126,29 +82,28 @@ async function synthesize({ claim, evidence, sources, score }) {
         responseSchema: {
           type: "object",
           properties: {
+            verdict: { type: "string" },
+            claimCredibility: { type: "number" },
+            evidenceAgreement: { type: "number" },
             summary: { type: "string" },
             reasoning: { type: "array", items: { type: "string" } },
             evidenceTrail: { type: "array", items: { type: "object" } },
           },
-          required: ["summary", "reasoning", "evidenceTrail"],
+          required: ["verdict", "claimCredibility", "evidenceAgreement", "summary", "reasoning", "evidenceTrail"],
         },
       },
     });
-    return JSON.parse(r.text);
+    return JSON.parse(result.text);
   } catch {
     return {
-      summary:
-        "Synthesis could not be completed. The available evidence is shown below.",
-      reasoning: ["Evidence synthesis unavailable."],
-      evidenceTrail: evidence,
+      verdict: "INSUFFICIENT_EVIDENCE",
+      claimCredibility: null,
+      evidenceAgreement: null,
+      summary: "Evidence synthesis could not be completed. The available evidence is shown without a definitive conclusion.",
+      reasoning: ["Gemini synthesis was unavailable."],
+      evidenceTrail: [],
     };
   }
 }
 
-module.exports = {
-  analyzeMedia,
-  generateEmbedding,
-  extractUrl,
-  synthesize,
-  model,
-};
+module.exports = { analyzeMedia, generateEmbedding, extractUrl, synthesize, forensicModel };
