@@ -43,7 +43,7 @@ Forensic analysis is treated as a **signal**, not a definitive truth detector. W
                               Relevant Sources
                                     │
                                     ▼
-                              Claude / LLM
+                              Gemini 3.7 Flash
                                     │
                                     ▼
                              Final Report
@@ -81,7 +81,7 @@ The frontend package uses React, React Router, Axios, Recharts, Tailwind CSS, Lu
 
 ## Backend
 
-The backend is a Node.js/Express service that orchestrates the investigation pipeline. It uses MongoDB/Mongoose for persistence, Multer for uploads, Cloudinary for media storage, OpenAI for embeddings, Hugging Face for forensic inference, and Anthropic Claude for evidence-bounded synthesis. fileciteturn13file0
+The backend is a Node.js/Express service that orchestrates the investigation pipeline. It uses MongoDB/Mongoose for persistence, Multer for uploads, Cloudinary for media storage, Gemini for embeddings and evidence-bounded synthesis, and Hugging Face for forensic inference.
 
 ### Investigation flow
 
@@ -91,7 +91,7 @@ The backend is a Node.js/Express service that orchestrates the investigation pip
 3. Start analysis
 4. Run applicable analysis steps
 5. Retrieve supporting source evidence with RAG
-6. Synthesize evidence with the LLM
+6. Synthesize evidence with Gemini
 7. Generate report
 8. Frontend polls status and displays the result
 ```
@@ -112,7 +112,9 @@ GET  /api/health
 
 ## RAG / Vector Search
 
-DeepCheck uses a curated corpus of permissioned fact-check/news documents. Documents are embedded with OpenAI embeddings and stored in the `sources` collection in MongoDB Atlas. A Vector Search index named `source_vector_index` is used to retrieve semantically relevant evidence. fileciteturn13file0
+DeepCheck uses a curated corpus of permissioned fact-check/news documents. Documents are embedded with Google's `gemini-embedding-001` model and stored in the `sources` collection in MongoDB Atlas. Embeddings are configured to 1536 dimensions to match the `source_vector_index` configuration.
+
+Gemini 3.7 Flash is then used to synthesize the retrieved evidence and analysis signals into the final report. citeturn0search0turn0search3
 
 ## Installation
 
@@ -120,7 +122,9 @@ DeepCheck uses a curated corpus of permissioned fact-check/news documents. Docum
 
 - Node.js
 - MongoDB / MongoDB Atlas
-- API credentials for the services you enable
+- Gemini API key
+- Hugging Face token if forensic analysis is enabled
+- Cloudinary credentials if media uploads are enabled
 
 ### 1. Clone the repository
 
@@ -142,7 +146,7 @@ Create the environment file:
 Copy-Item .env.example .env
 ```
 
-Then configure the variables in `.env`, including the database connection and any AI/storage credentials required by your setup. fileciteturn13file0
+Then configure the variables in `.env`.
 
 ### 3. Install frontend dependencies
 
@@ -200,25 +204,31 @@ npm run preview
 npm run lint
 ```
 
-## Environment and services
+## Environment variables
 
-The backend can use:
+```env
+PORT=5000
+MONGODB_URI=
+GEMINI_API_KEY=
+HF_TOKEN=
+CLOUDINARY_CLOUD_NAME=
+CLOUDINARY_API_KEY=
+CLOUDINARY_API_SECRET=
+CLIENT_URL=http://localhost:5173
+DEMO_MODE=false
+```
 
-- `MONGODB_URI` for persistence.
-- `CLAUDE_API_KEY` for evidence-bounded synthesis.
-- `OPENAI_API_KEY` for embeddings and corpus ingestion.
-- `HF_TOKEN` for the configured Hugging Face forensic model.
-- Cloudinary variables for production media storage.
-- `CLIENT_URL` for the deployed frontend origin. fileciteturn13file0
+`GEMINI_API_KEY` is used server-side for both embeddings and report synthesis. Do not expose it in the frontend. The official Google Gen AI JavaScript SDK is `@google/genai`. citeturn1search0turn0search8
 
-For local development, the backend also supports `DEMO_MODE=true` for controlled reports that do not call external AI services. fileciteturn13file0
+For local development, `DEMO_MODE=true` enables controlled reports without external AI calls.
 
 ## Important notes
 
 - DeepCheck does not treat a forensic model output as absolute truth.
 - Video uploads can be transcribed, but the current image forensic model is not automatically applied to video without representative-frame extraction.
 - URL investigation is intended for readable articles/webpages, not arbitrary social-video downloading.
-- The RAG corpus is curated rather than built by unrestricted website scraping. fileciteturn13file0
+- The RAG corpus is curated rather than built by unrestricted website scraping.
+- Gemini embeddings are configured to 1536 dimensions because the Atlas vector index expects 1536 dimensions. citeturn0search3turn0search4
 
 ## Status
 
