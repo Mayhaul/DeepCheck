@@ -1,15 +1,14 @@
 {
-  "name": "sattva-backend",
-  "version": "1.0.0",
-  "description": "",
+  "name": "deepcheck-backend",
+  "version": "2.0.0",
+  "description": "Hybrid evidence investigation backend for DeepCheck",
   "main": "src/server.js",
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "ingest:sources": "node scripts/ingestSources.js"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": ["fact-checking", "rag", "gemini", "brave-search"],
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
@@ -23,7 +22,8 @@
     "express": "^5.2.1",
     "helmet": "^8.3.0",
     "mongoose": "^9.9.3",
-    "multer": "^2.2.0"
+    "multer": "^2.2.0",
+    "pdf-parse": "^1.1.1"
   },
   "devDependencies": {
     "prettier": "^3.9.6"
