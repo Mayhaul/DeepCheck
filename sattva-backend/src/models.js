@@ -1,16 +1,16 @@
 const mongoose = require("mongoose");
+
 const submissionSchema = new mongoose.Schema(
   {
-    userId: String,
     type: {
       type: String,
-      enum: ["image", "video", "audio", "text", "article_url"],
+      enum: ["image", "video", "audio", "text", "article_url", "document"],
       required: true,
     },
+    claim: { type: String, required: true },
+    sourceUrl: String,
     fileUrl: String,
     fileMeta: Object,
-    claim: String,
-    sourceUrl: String,
     status: { type: String, default: "pending" },
     currentStage: { type: String, default: "submission_received" },
     progress: { type: Number, default: 0 },
@@ -18,26 +18,37 @@ const submissionSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
 const analysisSchema = new mongoose.Schema(
   {
     submissionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Submission",
       required: true,
+      unique: true,
     },
-    scores: { forensic: Number, provenance: Number, corroboration: Number },
-    trustScore: Number,
+    scores: {
+      claimCredibility: Number,
+      sourceCredibility: Number,
+      evidenceAgreement: Number,
+      forensic: Number,
+      provenance: Number,
+    },
+    credibilityScore: Number,
     confidenceLevel: String,
     verdict: String,
+    uploadedDocument: Object,
+    webEvidence: Object,
+    sourceProfile: Object,
     forensicDetails: Object,
     provenanceDetails: Object,
     transcript: Object,
-    claims: [String],
     reasoning: [String],
     evidenceTrail: [Object],
   },
   { timestamps: true },
 );
+
 const reportSchema = new mongoose.Schema(
   {
     submissionId: {
@@ -47,11 +58,19 @@ const reportSchema = new mongoose.Schema(
     },
     summary: String,
     verdict: String,
-    trustScore: Number,
+    credibilityScore: Number,
     confidenceLevel: String,
-    scores: { forensic: Number, provenance: Number, corroboration: Number },
+    scores: {
+      claimCredibility: Number,
+      sourceCredibility: Number,
+      evidenceAgreement: Number,
+      forensic: Number,
+      provenance: Number,
+    },
     evidenceTrail: [Object],
-    sources: [Object],
+    uploadedDocument: Object,
+    webEvidence: Object,
+    sourceProfile: Object,
     reasoning: [String],
     transcript: [Object],
     provenance: Object,
@@ -59,6 +78,7 @@ const reportSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
 const sourceSchema = new mongoose.Schema(
   {
     title: { type: String, required: true },
@@ -73,6 +93,7 @@ const sourceSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
 module.exports = {
   Submission: mongoose.model("Submission", submissionSchema),
   Analysis: mongoose.model("Analysis", analysisSchema),
