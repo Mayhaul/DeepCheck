@@ -1,0 +1,29 @@
+{
+  "name": "sattva-backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/server.js",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js",
+    "ingest:sources": "node scripts/ingestSources.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.120.0",
+    "@huggingface/inference": "^4.13.28",
+    "axios": "^1.19.0",
+    "cheerio": "^1.2.0",
+    "cloudinary": "^2.10.1",
+    "cors": "^2.8.6",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "helmet": "^8.3.0",
+    "mongoose": "^9.9.3",
+    "multer": "^2.2.0",
+    "openai": "^7.5.0"
+  }
+}
