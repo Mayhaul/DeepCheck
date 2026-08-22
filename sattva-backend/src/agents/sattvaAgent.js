@@ -1,222 +1,143 @@
-const { Submission, Analysis, Report } = require('../models');
-const { analyzeMedia, extractUrl, synthesize } = require('../services');
-const { searchSources } = require('../ragService');
-const { transcribeMedia } = require('../transcriptionService');
-const { inspectProvenance } = require('../provenanceService');
-const { calculateScore } = require('../utils');
-const demo = {
-  authentic: {
-    trustScore: 88,
-    confidenceLevel: 'HIGH',
-    verdict: 'LIKELY_AUTHENTIC',
-    scores: { forensic: 84, provenance: 81, corroboration: 94 },
-  },
-  manipulated: {
-    trustScore: 32,
-    confidenceLevel: 'MEDIUM',
-    verdict: 'LIKELY_MANIPULATED',
-    scores: { forensic: 28, provenance: 44, corroboration: 35 },
-  },
-  conflicting: {
-    trustScore: 51,
-    confidenceLevel: 'LOW',
-    verdict: 'NOT_CONFIDENT_ENOUGH_TO_CALL',
-    scores: { forensic: 48, provenance: 39, corroboration: 58 },
-  },
-};
+const { Submission, Analysis, Report } = require("../models");
+const { analyzeMedia, extractUrl, synthesize } = require("../services");
+const { searchSources } = require("../ragService");
+const { transcribeMedia } = require("../transcriptionService");
+const { inspectProvenance } = require("../provenanceService");
+const { extractDocumentText, indexDocument, searchDocument } = require("../documentService");
+const { searchClaim, searchSourceHistory } = require("../webSearchService");
+const { assessSourceCredibility } = require("../sourceCredibilityService");
+const { calculateCredibility } = require("../utils");
+
 async function update(submission, stage, progress, message) {
-  Object.assign(submission, {
-    status: 'processing',
-    currentStage: stage,
-    progress,
-    message,
-  });
+  Object.assign(submission, { status: "processing", currentStage: stage, progress, message });
   await submission.save();
 }
+
+function publisherFromEvidence(s, webEvidence) {
+  return s.sourceName || webEvidence?.results?.[0]?.publisher || null;
+}
+
 async function runInvestigation(id, { demoCase } = {}) {
   const s = await Submission.findById(id);
-  if (!s)
-    throw Object.assign(new Error('SUBMISSION_NOT_FOUND'), { status: 404 });
-  if (process.env.DEMO_MODE === 'true') {
-    const key =
-      demoCase ||
-      (/alter|fake/i.test(s.claim || '')
-        ? 'manipulated'
-        : /conflict/i.test(s.claim || '')
-          ? 'conflicting'
-          : 'authentic');
-    const d = demo[key];
-    const trail = [
-      {
-        type: 'demo',
-        description: 'Controlled demo result. No external AI model was called.',
-        confidence: 0,
-        relationship: 'neutral',
-      },
-    ];
+  if (!s) throw Object.assign(new Error("SUBMISSION_NOT_FOUND"), { status: 404 });
+
+  if (process.env.DEMO_MODE === "true") {
     const report = await Report.findOneAndUpdate(
       { submissionId: s._id },
       {
         submissionId: s._id,
-        ...d,
-        summary:
-          'This is a controlled demonstration result, not a live AI investigation.',
-        reasoning: ['Demo mode is enabled.'],
-        evidenceTrail: trail,
-        sources: [],
-        transcript: [],
-        provenance: { available: false, reason: 'DEMO_MODE' },
+        summary: "Demo mode is enabled. No live evidence was collected.",
+        verdict: demoCase === "false" ? "LIKELY_FALSE" : "SUPPORTED",
+        credibilityScore: demoCase === "false" ? 32 : 82,
+        confidenceLevel: "HIGH",
+        scores: { claimCredibility: demoCase === "false" ? 25 : 88, sourceCredibility: 70, evidenceAgreement: 80 },
+        evidenceTrail: [{ type: "demo", description: "Controlled demonstration result.", confidence: 0, relationship: "neutral" }],
+        uploadedDocument: { available: false, reason: "DEMO_MODE" },
+        webEvidence: { available: false, reason: "DEMO_MODE", results: [] },
+        sourceProfile: { available: false, reason: "DEMO_MODE" },
+        reasoning: ["Demo mode is enabled."],
+        provenance: { available: false, reason: "DEMO_MODE" },
         isDemo: true,
       },
-      { upsert: true, new: true }
+      { upsert: true, new: true },
     );
-    s.status = 'completed';
-    s.currentStage = 'completed';
-    s.progress = 100;
-    s.message = 'Demo report generated.';
+    Object.assign(s, { status: "completed", currentStage: "completed", progress: 100, message: "Demo report generated." });
     await s.save();
     return report;
   }
-  await update(s, 'claim_analysis', 15, 'Understanding the submitted claim.');
-  let claim = s.claim || '';
-  let page = null;
-  if (s.type === 'article_url') {
-    page = await extractUrl(s.sourceUrl);
-    if (page.available) claim = page.content;
+
+  await update(s, "claim_analysis", 10, "Understanding the submitted claim.");
+  const claim = s.claim.trim();
+
+  let uploadedDocument = { available: false, reason: "NOT_PROVIDED" };
+  if (s.type === "document") {
+    await update(s, "document_rag", 25, "Reading and indexing the uploaded document.");
+    const extracted = await extractDocumentText(s.fileUrl, s.fileMeta?.mimeType);
+    if (extracted.available) {
+      const indexed = await indexDocument(s._id, extracted.text);
+      const retrieved = await searchDocument(s._id, claim);
+      uploadedDocument = { ...extracted, indexedChunks: indexed.chunks, retrievedChunks: retrieved.chunks };
+    } else uploadedDocument = extracted;
   }
-  await update(
-    s,
-    'forensic_analysis',
-    35,
-    'Checking available forensic signals.'
-  );
-  const forensic =
-    s.type === 'image'
-      ? await analyzeMedia(s.fileUrl)
-      : {
-          available: false,
-          reason:
-            s.type === 'video'
-              ? 'VIDEO_FRAME_EXTRACTION_UNAVAILABLE'
-              : 'NOT_APPLICABLE',
-          score: null,
-        };
-  await update(s, 'transcription', 50, 'Processing available audio evidence.');
-  const transcript = ['audio', 'video'].includes(s.type)
+
+  await update(s, "web_search", 45, "Searching independent web and news evidence.");
+  const webEvidence = await searchClaim(claim);
+
+  await update(s, "source_credibility", 58, "Checking the source's public history.");
+  const publisher = publisherFromEvidence(s, webEvidence);
+  const sourceHistory = await searchSourceHistory(publisher);
+  const sourceProfile = assessSourceCredibility(sourceHistory, publisher);
+
+  await update(s, "knowledge_base", 68, "Checking the curated knowledge base.");
+  const knowledgeBase = await searchSources(claim);
+
+  await update(s, "forensic_analysis", 76, "Checking available media forensic signals.");
+  const forensic = s.type === "image"
+    ? await analyzeMedia(s.fileUrl)
+    : { available: false, reason: "NOT_APPLICABLE", score: null };
+
+  await update(s, "transcription", 82, "Processing available audio evidence.");
+  const transcript = ["audio", "video"].includes(s.type)
     ? await transcribeMedia(s.fileUrl)
-    : { text: '', segments: [], available: false, reason: 'NOT_APPLICABLE' };
-  await update(
-    s,
-    'source_corroboration',
-    65,
-    'Retrieving semantically relevant sources.'
-  );
-  const rag = claim
-    ? await searchSources(claim)
-    : { available: false, reason: 'NO_CLAIM' };
-  const corroboration =
-    rag.available && rag.sources.length
-      ? Math.round(
-          rag.sources.reduce((a, x) => a + (x.relevance || 0), 0) /
-            rag.sources.length
-        )
-      : null;
-  await update(s, 'provenance_check', 78, 'Reviewing available provenance.');
-  const provenance = inspectProvenance(s);
-  const provenanceScore = provenance.available ? 50 : null;
+    : { available: false, reason: "NOT_APPLICABLE", text: "", segments: [] };
+
+  await update(s, "evidence_synthesis", 90, "Comparing evidence streams.");
+  const synthesis = await synthesize({ claim, uploadedDocument, webEvidence, sourceProfile, knowledgeBase, forensic, transcript });
+
   const scores = {
+    claimCredibility: Number.isFinite(synthesis.claimCredibility) ? synthesis.claimCredibility : null,
+    sourceCredibility: sourceProfile.score,
+    evidenceAgreement: Number.isFinite(synthesis.evidenceAgreement) ? synthesis.evidenceAgreement : null,
     forensic: forensic.score,
-    provenance: provenanceScore,
-    corroboration,
+    provenance: null,
   };
-  const score = calculateScore(scores);
-  const evidence = [
-    ...(forensic.available
-      ? [
-          {
-            type: 'forensic',
-            description:
-              'Forensic signal returned by the configured image classifier.',
-            confidence: forensic.confidence,
-            relationship:
-              forensic.score < 50
-                ? 'supports_manipulation'
-                : 'supports_authenticity',
-          },
-        ]
-      : []),
-    ...(rag.available
-      ? rag.sources.map((x) => ({
-          type: 'source',
-          description: `Retrieved source: ${x.title}`,
-          confidence: (x.relevance || 0) / 100,
-          relationship: 'neutral',
-          source: x.url,
-        }))
-      : []),
-    ...(page
-      ? [
-          {
-            type: 'url_extraction',
-            description: page.available
-              ? 'Article content was extracted for investigation context.'
-              : 'Article content could not be fetched.',
-            confidence: page.available ? 1 : 0,
-            relationship: 'neutral',
-          },
-        ]
-      : []),
-  ];
-  await update(s, 'evidence_synthesis', 90, 'Synthesizing available evidence.');
-  const synthesis = await synthesize({
-    claim,
-    evidence,
-    sources: rag.sources || [],
-    score,
-  });
+  const finalScore = calculateCredibility(scores);
+
+  await update(s, "report_generation", 96, "Generating the investigation report.");
   const analysis = await Analysis.findOneAndUpdate(
     { submissionId: s._id },
     {
       submissionId: s._id,
       scores,
-      trustScore: score.trustScore,
-      confidenceLevel: score.confidenceLevel,
-      verdict: score.verdict,
+      credibilityScore: finalScore.credibilityScore,
+      confidenceLevel: finalScore.confidenceLevel,
+      verdict: synthesis.verdict,
+      uploadedDocument,
+      webEvidence,
+      sourceProfile,
       forensicDetails: forensic,
-      provenanceDetails: provenance,
+      provenanceDetails: inspectProvenance(s),
       transcript,
-      claims: claim ? [claim.slice(0, 2000)] : [],
       reasoning: synthesis.reasoning,
       evidenceTrail: synthesis.evidenceTrail,
     },
-    { upsert: true, new: true }
+    { upsert: true, new: true },
   );
-  await update(s, 'report_generation', 96, 'Generating report.');
+
   const report = await Report.findOneAndUpdate(
     { submissionId: s._id },
     {
       submissionId: s._id,
       summary: synthesis.summary,
-      verdict: score.verdict,
-      trustScore: score.trustScore,
-      confidenceLevel: score.confidenceLevel,
+      verdict: synthesis.verdict,
+      credibilityScore: finalScore.credibilityScore,
+      confidenceLevel: finalScore.confidenceLevel,
       scores,
       evidenceTrail: synthesis.evidenceTrail,
-      sources: rag.sources || [],
+      uploadedDocument,
+      webEvidence,
+      sourceProfile,
       reasoning: synthesis.reasoning,
-      transcript: transcript.segments,
-      provenance,
+      transcript: transcript.segments || [],
+      provenance: inspectProvenance(s),
       isDemo: false,
     },
-    { upsert: true, new: true }
+    { upsert: true, new: true },
   );
-  Object.assign(s, {
-    status: 'completed',
-    currentStage: 'completed',
-    progress: 100,
-    message: 'Report generated.',
-  });
+
+  Object.assign(s, { status: "completed", currentStage: "completed", progress: 100, message: "Report generated." });
   await s.save();
-  return report;
+  return { analysis, report };
 }
+
 module.exports = { runInvestigation };
