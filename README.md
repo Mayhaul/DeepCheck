@@ -1,215 +1,87 @@
 # DeepCheck
 
-DeepCheck is an AI-powered media and information investigation platform designed to help users assess suspicious claims and submitted media using multiple evidence sources.
+DeepCheck is a hybrid AI evidence-investigation system for checking claims and assessing the credibility of the sources behind them.
 
-The project is split into a React/Vite frontend and a Node.js/Express backend. The backend handles investigation workflows, retrieval-augmented search, media analysis, transcription, and evidence-bounded reporting. fileciteturn2file0 fileciteturn4file0
+## Core idea
 
-## Problem
-
-Information online can be misleading, manipulated, or difficult to verify quickly. DeepCheck helps users investigate a claim or piece of media by combining multiple signals instead of relying on a simple **fake/real** label.
-
-## What DeepCheck does
-
-- Accepts claims, text, images, video, audio, and article URLs.
-- Runs media analysis and other investigation steps.
-- Retrieves relevant evidence from a curated source corpus using RAG.
-- Uses AI to synthesize the collected evidence into an explainable report.
-- Presents a trust score, verdict, confidence, evidence trail, source corroboration, and provenance information.
-
-Forensic analysis is treated as a **signal**, not a definitive truth detector. When evidence is missing or conflicting, the system is designed to expose that limitation rather than invent confidence. fileciteturn13file0
-
-## Architecture
+A user provides a **claim/fact to verify** and can optionally upload supporting evidence such as a PDF or text document. DeepCheck then independently searches the live web/news and investigates the public history of the source making the claim.
 
 ```text
-                         ┌─────────────────────┐
-                         │   React + Vite UI   │
-                         │  sattva-frontend/   │
-                         └──────────┬──────────┘
-                                    │ Axios / REST
-                                    ▼
-                         ┌─────────────────────┐
-                         │ Node.js + Express   │
-                         │  sattva-backend/    │
-                         └──────────┬──────────┘
-                                    │
-                  ┌─────────────────┼─────────────────┐
-                  ▼                 ▼                 ▼
-             Forensics             RAG          Transcription
-                  │                 │                 │
-                  ▼                 ▼                 ▼
-             HF Model       MongoDB Atlas        Audio/Text
-                                    │
-                                    ▼
-                              Relevant Sources
-                                    │
-                                    ▼
-                              Gemini 3.7 Flash
-                                    │
-                                    ▼
-                             Final Report
+Claim + User Evidence
+        │
+        ├── Document RAG ─────────┐
+        ├── Brave Web/News Search ├──> Evidence comparison ──> Gemini ──> Report
+        ├── Source-history search ┘
+        └── Media forensics / transcription when applicable
 ```
-
-## Project structure
-
-```text
-DeepCheck/
-├── sattva-backend/       # Node.js API, analysis pipeline, RAG and ingestion
-│   ├── src/              # Backend application code
-│   ├── scripts/          # Corpus ingestion scripts
-│   ├── data/             # Example/source data
-│   └── .env.example      # Backend environment template
-├── sattva-frontend/      # React + Vite frontend
-│   ├── src/              # React components, routes, API client and demo data
-│   └── package.json
-└── .gitignore
-```
-
-## Frontend
-
-The frontend is built with **React + Vite** and provides the user-facing investigation workflow. It includes:
-
-- Landing page and investigation entry point.
-- Upload/input flows for image, video, audio, text, and article URLs.
-- Investigation progress polling while the backend processes evidence.
-- Report pages showing trust score, confidence, evidence signals, corroborating sources, and provenance.
-- Demo investigation cases.
-- Client-side routing with React Router.
-- REST API communication through Axios.
-- Charts using Recharts and icons using Lucide React.
-
-The frontend package uses React, React Router, Axios, Recharts, Tailwind CSS, Lucide React, Vite, and ESLint. fileciteturn16file0
 
 ## Backend
 
-The backend is a Node.js/Express service that orchestrates the investigation pipeline. It uses MongoDB/Mongoose for persistence, Multer for uploads, Cloudinary for media storage, Gemini for embeddings and evidence-bounded synthesis, and Hugging Face for forensic inference.
+The Node.js/Express backend orchestrates the investigation. MongoDB Atlas stores investigations, reports, curated source embeddings, and per-investigation document chunks. Gemini provides embeddings and evidence synthesis. Brave Search provides live web/news retrieval. Hugging Face supplies the image-forensic signal. Cloudinary stores uploaded media/documents.
 
-### Investigation flow
+### RAG layers
 
-```text
-1. Submit claim / media / URL
-2. Store investigation
-3. Start analysis
-4. Run applicable analysis steps
-5. Retrieve supporting source evidence with RAG
-6. Synthesize evidence with Gemini
-7. Generate report
-8. Frontend polls status and displays the result
-```
+1. **Uploaded-document RAG:** documents are extracted, chunked, embedded with `gemini-embedding-2`, stored for the investigation, and searched against the claim.
+2. **Curated knowledge-base RAG:** trusted/permissioned sources remain in MongoDB Atlas Vector Search.
+3. **Live web retrieval:** Brave Web + News Search supplies current independent evidence. Web results are not blindly persisted into the permanent corpus.
 
-### Core API
+### Source credibility
 
-```text
-POST /api/submissions
-POST /api/analyze/:id
-GET  /api/investigation/:id/status
-GET  /api/analysis/:id
-GET  /api/report/:id
-POST /api/forensics
-POST /api/rag/search
-POST /api/transcribe
-GET  /api/health
-```
+DeepCheck separately searches for historical signals such as fact-checks, misinformation reports, corrections, retractions, and corroboration around the source/publisher. This produces a **source credibility signal**, not proof that the current claim is false.
 
-## RAG / Vector Search
+### Final report
 
-DeepCheck uses a curated corpus of permissioned fact-check/news documents. Documents are embedded with Google's `gemini-embedding-001` model and stored in the `sources` collection in MongoDB Atlas. Embeddings are configured to 1536 dimensions to match the `source_vector_index` configuration.
+The report keeps these concepts separate:
 
-Gemini 3.7 Flash is then used to synthesize the retrieved evidence and analysis signals into the final report. citeturn0search0turn0search3
+- **Claim credibility**
+- **Source credibility**
+- **Evidence agreement**
+- **Forensic signal** when media is supplied
+- **Overall credibility score**
+- **Confidence level**
+- Evidence trail and source links
 
-## Installation
+## Frontend
 
-### Prerequisites
+The React + Vite frontend provides the investigation form, evidence upload, progress polling, and report UI. A user can submit a claim alone, claim + document, image/video/audio + claim, or an article URL + claim.
 
-- Node.js
-- MongoDB / MongoDB Atlas
-- Gemini API key
-- Hugging Face token if forensic analysis is enabled
-- Cloudinary credentials if media uploads are enabled
-
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/Mayhaul/DeepCheck.git
-cd DeepCheck
-```
-
-### 2. Install backend dependencies
-
-```bash
-cd sattva-backend
-npm install
-```
-
-Create the environment file:
-
-```powershell
-Copy-Item .env.example .env
-```
-
-Then configure the variables in `.env`.
-
-### 3. Install frontend dependencies
-
-Open another terminal:
-
-```bash
-cd sattva-frontend
-npm install
-```
-
-The frontend supports Vite environment variables. To point it at a backend running somewhere other than the default local API, set:
-
-```env
-VITE_API_URL=http://localhost:5000/api
-```
-
-The frontend falls back to `http://localhost:5000/api` when `VITE_API_URL` is not provided.
-
-### 4. Start the backend
-
-```bash
-cd sattva-backend
-npm run dev
-```
-
-### 5. Start the frontend
-
-In a second terminal:
-
-```bash
-cd sattva-frontend
-npm run dev
-```
-
-Vite will print the local frontend URL in the terminal.
-
-## Useful commands
+## Setup
 
 ### Backend
 
 ```bash
+cd sattva-backend
 npm install
+```
+
+Create `sattva-backend/.env` from `.env.example` and add your keys.
+
+```bash
 npm run dev
-npm start
-npm run ingest:sources -- data/sources.example.json
 ```
 
 ### Frontend
 
 ```bash
+cd sattva-frontend
 npm install
 npm run dev
-npm run build
-npm run preview
-npm run lint
 ```
 
-## Environment variables
+Optional frontend environment variable:
+
+```env
+VITE_API_URL=http://localhost:5000/api
+VITE_DEMO_MODE=false
+```
+
+## Backend environment
 
 ```env
 PORT=5000
 MONGODB_URI=
 GEMINI_API_KEY=
+BRAVE_SEARCH_API_KEY=
 HF_TOKEN=
 CLOUDINARY_CLOUD_NAME=
 CLOUDINARY_API_KEY=
@@ -218,24 +90,28 @@ CLIENT_URL=http://localhost:5173
 DEMO_MODE=false
 ```
 
-`GEMINI_API_KEY` is used server-side for both embeddings and report synthesis. Do not expose it in the frontend. The official Google Gen AI JavaScript SDK is `@google/genai`. citeturn1search0turn0search8
+Brave Search uses the `X-Subscription-Token` header and exposes separate web and news search endpoints. urlBrave Search API documentationhttps://api-dashboard.search.brave.com/api-reference/web/search/get
 
-For local development, `DEMO_MODE=true` enables controlled reports without external AI calls.
+Gemini 3.7 Flash is used for synthesis and Gemini Embedding 2 for the vector representations. Gemini Embedding 2 supports 1536-dimensional output, matching the configured Atlas vector-search dimension. citeturn1search1turn3search0
 
-## Important notes
+## API
 
-- DeepCheck does not treat a forensic model output as absolute truth.
-- Video uploads can be transcribed, but the current image forensic model is not automatically applied to video without representative-frame extraction.
-- URL investigation is intended for readable articles/webpages, not arbitrary social-video downloading.
-- The RAG corpus is curated rather than built by unrestricted website scraping.
-- Gemini embeddings are configured to 1536 dimensions because the Atlas vector index expects 1536 dimensions. citeturn0search3turn0search4
+```text
+POST /api/submissions
+POST /api/analyze/:id
+GET  /api/investigation/:id/status
+GET  /api/analysis/:id
+GET  /api/report/:id
+POST /api/rag/search
+POST /api/web/search
+POST /api/source/history
+GET  /api/health
+```
+
+## Important limitation
+
+DeepCheck does **not** claim that a source's past mistakes prove its current claim is false. The current claim must be assessed from the evidence available for that claim.
 
 ## Status
 
 🚧 Active development
-
-The project is evolving, so APIs, models, UI components, and deployment configuration may change.
-
-## License
-
-License information has not been added yet.
