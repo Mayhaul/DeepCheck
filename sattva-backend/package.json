@@ -25,5 +25,8 @@
     "mongoose": "^9.9.3",
     "multer": "^2.2.0",
     "openai": "^7.5.0"
+  },
+  "devDependencies": {
+    "prettier": "^3.9.6"
   }
 }
