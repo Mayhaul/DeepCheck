@@ -1,8 +1,143 @@
 const axios = require("axios");
-function configured(){return Boolean(process.env.BRAVE_SEARCH_API_KEY);}
-async function braveSearch(query,{count=8,news=false}={}){if(!configured())return {available:false,reason:"BRAVE_NOT_CONFIGURED",results:[]};try{const endpoint=news?"https://api.search.brave.com/res/v1/news/search":"https://api.search.brave.com/res/v1/web/search";const response=await axios.get(endpoint,{params:{q:query,count,search_lang:"en",country:"IN",safesearch:"moderate"},headers:{"X-Subscription-Token":process.env.BRAVE_SEARCH_API_KEY,Accept:"application/json"},timeout:15000});const items=response.data?.web?.results||response.data?.results||[];return {available:true,results:items.map(item=>({title:item.title||"Untitled result",url:item.url,description:item.description||item.snippet||"",publisher:publisherFrom(item.url),publishedAt:item.age||null})).filter(x=>x.url)};}catch{return {available:false,reason:"BRAVE_SEARCH_FAILED",results:[]};}}
-async function searchClaim(claim){const [web,news]=await Promise.all([braveSearch(claim,{count:6}),braveSearch(claim,{count:6,news:true})]);const results=dedupe([...(web.results||[]),...(news.results||[])]).slice(0,10);return {available:web.available||news.available,results,reason:web.reason||news.reason};}
-async function searchSourceHistory(publisher){if(!publisher)return {available:false,reason:"SOURCE_UNKNOWN",results:[],signals:{}};const queries=[`"${publisher}" fact check false claim misinformation`,`"${publisher}" fake news correction retraction`];const responses=await Promise.all(queries.map(q=>braveSearch(q,{count:6})));const results=dedupe(responses.flatMap(r=>r.results||[])).slice(0,12);const negative=results.filter(r=>/fake|false|misinformation|hoax|debunk|retract|correction|fabricat/i.test(`${r.title} ${r.description}`));const positive=results.filter(r=>/fact check|corroborat|correction|transparent|accurate/i.test(`${r.title} ${r.description}`));const score=results.length?Math.max(0,Math.min(100,70-negative.length*8+positive.length*3)):null;return {available:responses.some(r=>r.available),results,signals:{negativeReports:negative.length,positiveSignals:positive.length,historyScore:score}};}
-function publisherFrom(url){try{return new URL(url).hostname.replace(/^www\./,"");}catch{return "Unknown source";}}
-function dedupe(results){const seen=new Set();return results.filter(r=>r.url&&!seen.has(r.url)&&seen.add(r.url));}
-module.exports={braveSearch,searchClaim,searchSourceHistory};
+
+function configured() {
+  return Boolean(process.env.TAVILY_API_KEY);
+}
+
+async function tavilySearch(query, { maxResults = 8, topic = "general" } = {}) {
+  if (!configured()) {
+    return {
+      available: false,
+      reason: "TAVILY_NOT_CONFIGURED",
+      results: [],
+    };
+  }
+
+  try {
+    const response = await axios.post(
+      "https://api.tavily.com/search",
+      {
+        api_key: process.env.TAVILY_API_KEY,
+        query,
+        search_depth: "advanced",
+        topic,
+        max_results: maxResults,
+        include_answer: false,
+        include_raw_content: false,
+      },
+      {
+        timeout: 20000,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+
+    return {
+      available: true,
+      results: (response.data?.results || [])
+        .map((item) => ({
+          title: item.title || "Untitled result",
+          url: item.url,
+          description: item.content || "",
+          publisher: publisherFrom(item.url),
+          publishedAt: item.published_date || null,
+          relevance: Number.isFinite(item.score)
+            ? Math.round(item.score * 100)
+            : null,
+        }))
+        .filter((item) => item.url),
+    };
+  } catch {
+    return {
+      available: false,
+      reason: "TAVILY_SEARCH_FAILED",
+      results: [],
+    };
+  }
+}
+
+async function searchClaim(claim) {
+  const [web, news] = await Promise.all([
+    tavilySearch(claim, { maxResults: 6, topic: "general" }),
+    tavilySearch(`${claim} latest news`, { maxResults: 6, topic: "news" }),
+  ]);
+
+  const results = dedupe([
+    ...(web.results || []),
+    ...(news.results || []),
+  ]).slice(0, 10);
+
+  return {
+    available: web.available || news.available,
+    results,
+    reason: web.reason || news.reason,
+  };
+}
+
+async function searchSourceHistory(publisher) {
+  if (!publisher) {
+    return {
+      available: false,
+      reason: "SOURCE_UNKNOWN",
+      results: [],
+      signals: {},
+    };
+  }
+
+  const queries = [
+    `"${publisher}" fact check false claim misinformation`,
+    `"${publisher}" fake news correction retraction`,
+  ];
+
+  const responses = await Promise.all(
+    queries.map((query) => tavilySearch(query, { maxResults: 6 })),
+  );
+
+  const results = dedupe(
+    responses.flatMap((response) => response.results || []),
+  ).slice(0, 12);
+
+  const negative = results.filter((result) =>
+    /fake|false|misinformation|hoax|debunk|retract|correction|fabricat/i.test(
+      `${result.title} ${result.description}`,
+    ),
+  );
+
+  const positive = results.filter((result) =>
+    /fact check|corroborat|correction|transparent|accurate/i.test(
+      `${result.title} ${result.description}`,
+    ),
+  );
+
+  const score = results.length
+    ? Math.max(0, Math.min(100, 70 - negative.length * 8 + positive.length * 3))
+    : null;
+
+  return {
+    available: responses.some((response) => response.available),
+    results,
+    signals: {
+      negativeReports: negative.length,
+      positiveSignals: positive.length,
+      historyScore: score,
+    },
+  };
+}
+
+function publisherFrom(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return "Unknown source";
+  }
+}
+
+function dedupe(results) {
+  const seen = new Set();
+  return results.filter((result) => {
+    if (!result.url || seen.has(result.url)) return false;
+    seen.add(result.url);
+    return true;
+  });
+}
+
+module.exports = { tavilySearch, searchClaim, searchSourceHistory };
