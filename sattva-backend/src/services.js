@@ -73,6 +73,9 @@ async function generateEmbedding(text) {
   const r = await ai.models.embedContent({
     model: "gemini-embedding-001",
     contents: text,
+    config: {
+      outputDimensionality: 1536,
+    },
   });
   const embedding = r.embeddings?.[0]?.values;
   if (!Array.isArray(embedding)) {
