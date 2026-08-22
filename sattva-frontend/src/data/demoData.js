@@ -1,3 +1,112 @@
-const common={isDemo:true,confidenceLevel:'HIGH',sources:[{publisher:'National Disaster Management Authority',title:'Situation report: regional flood response',url:'https://ndma.gov.in/',date:'14 Aug 2026',relevance:94,stance:'supports'},{publisher:'Independent Newsroom',title:'Local officials confirm events described',url:'https://example.com',date:'14 Aug 2026',relevance:82,stance:'supports'}],provenance:{metadata:'Partial metadata available',created:'14 Aug 2026, 09:42',modification:'No material indicators',c2pa:'Not present'}}
-const evidence=[{title:'Forensic analysis detected facial-region inconsistencies.',type:'Forensic signal',confidence:72,stance:'contradicts',source:'Media analysis',description:'Frame-level regions show inconsistent edge and lighting characteristics.'},{title:'Transcript claim conflicts with an official source.',type:'Claim analysis',confidence:87,stance:'contradicts',source:'Official statement',description:'The claim made in the clip conflicts with the verified timeline.'},{title:'Two independent sources corroborate the underlying event.',type:'Source corroboration',confidence:91,stance:'supports',source:'News sources',description:'The event occurred, though the supplied clip appears altered.'}]
-export const demoCases=[{...common,id:'demo-authentic',label:'Verified field footage',description:'Corroborated reporting with consistent forensic and provenance signals.',verdict:'LIKELY_AUTHENTIC',trustScore:88,scores:{forensic:84,provenance:81,corroboration:94},summary:'Independent reporting corroborates the event, and the examined media shows no significant manipulation indicators. The provenance signal is incomplete, so this remains an evidence-based assessment rather than a definitive claim.',evidenceTrail:[{...evidence[2]},{title:'No notable scene-compositing inconsistencies detected.',type:'Forensic signal',confidence:84,stance:'supports',source:'Media analysis',description:'The forensic signal supports authenticity but is not a truth detector.'}]},{...common,id:'demo-manipulated',label:'Altered broadcast clip',description:'Forensic irregularities conflict with the submitted clip’s claimed origin.',verdict:'LIKELY_MANIPULATED',trustScore:82,scores:{forensic:72,provenance:81,corroboration:91},summary:'Several manipulation indicators were detected. However, source evidence is mixed. Because the forensic signal conflicts with corroborating evidence, Sattva reduced its confidence.',evidenceTrail:evidence},{...common,id:'demo-conflicting',label:'Conflicting evidence',description:'Mixed source and forensic signals leave the conclusion unresolved.',verdict:'UNCERTAIN',trustScore:51,scores:{forensic:48,provenance:39,corroboration:58},summary:'Evidence is mixed and insufficiently consistent to support a confident conclusion. More original media or independently verifiable provenance would materially improve this assessment.',evidenceTrail:[{...evidence[0],stance:'neutral'},{...evidence[2],stance:'neutral'}]}]
+const common = {
+  isDemo: true,
+  confidenceLevel: 'HIGH',
+  sources: [
+    {
+      publisher: 'National Disaster Management Authority',
+      title: 'Situation report: regional flood response',
+      url: 'https://ndma.gov.in/',
+      date: '14 Aug 2026',
+      relevance: 94,
+      stance: 'supports',
+    },
+    {
+      publisher: 'Independent Newsroom',
+      title: 'Local officials confirm events described',
+      url: 'https://example.com',
+      date: '14 Aug 2026',
+      relevance: 82,
+      stance: 'supports',
+    },
+  ],
+  provenance: {
+    metadata: 'Partial metadata available',
+    created: '14 Aug 2026, 09:42',
+    modification: 'No material indicators',
+    c2pa: 'Not present',
+  },
+};
+const evidence = [
+  {
+    title: 'Forensic analysis detected facial-region inconsistencies.',
+    type: 'Forensic signal',
+    confidence: 72,
+    stance: 'contradicts',
+    source: 'Media analysis',
+    description:
+      'Frame-level regions show inconsistent edge and lighting characteristics.',
+  },
+  {
+    title: 'Transcript claim conflicts with an official source.',
+    type: 'Claim analysis',
+    confidence: 87,
+    stance: 'contradicts',
+    source: 'Official statement',
+    description:
+      'The claim made in the clip conflicts with the verified timeline.',
+  },
+  {
+    title: 'Two independent sources corroborate the underlying event.',
+    type: 'Source corroboration',
+    confidence: 91,
+    stance: 'supports',
+    source: 'News sources',
+    description:
+      'The event occurred, though the supplied clip appears altered.',
+  },
+];
+export const demoCases = [
+  {
+    ...common,
+    id: 'demo-authentic',
+    label: 'Verified field footage',
+    description:
+      'Corroborated reporting with consistent forensic and provenance signals.',
+    verdict: 'LIKELY_AUTHENTIC',
+    trustScore: 88,
+    scores: { forensic: 84, provenance: 81, corroboration: 94 },
+    summary:
+      'Independent reporting corroborates the event, and the examined media shows no significant manipulation indicators. The provenance signal is incomplete, so this remains an evidence-based assessment rather than a definitive claim.',
+    evidenceTrail: [
+      { ...evidence[2] },
+      {
+        title: 'No notable scene-compositing inconsistencies detected.',
+        type: 'Forensic signal',
+        confidence: 84,
+        stance: 'supports',
+        source: 'Media analysis',
+        description:
+          'The forensic signal supports authenticity but is not a truth detector.',
+      },
+    ],
+  },
+  {
+    ...common,
+    id: 'demo-manipulated',
+    label: 'Altered broadcast clip',
+    description:
+      'Forensic irregularities conflict with the submitted clip’s claimed origin.',
+    verdict: 'LIKELY_MANIPULATED',
+    trustScore: 82,
+    scores: { forensic: 72, provenance: 81, corroboration: 91 },
+    summary:
+      'Several manipulation indicators were detected. However, source evidence is mixed. Because the forensic signal conflicts with corroborating evidence, Sattva reduced its confidence.',
+    evidenceTrail: evidence,
+  },
+  {
+    ...common,
+    id: 'demo-conflicting',
+    label: 'Conflicting evidence',
+    description:
+      'Mixed source and forensic signals leave the conclusion unresolved.',
+    verdict: 'UNCERTAIN',
+    trustScore: 51,
+    scores: { forensic: 48, provenance: 39, corroboration: 58 },
+    summary:
+      'Evidence is mixed and insufficiently consistent to support a confident conclusion. More original media or independently verifiable provenance would materially improve this assessment.',
+    evidenceTrail: [
+      { ...evidence[0], stance: 'neutral' },
+      { ...evidence[2], stance: 'neutral' },
+    ],
+  },
+];
