@@ -1,39 +1,4 @@
 const cloudinary = require("cloudinary").v2;
-const configured = () =>
-  Boolean(
-    process.env.CLOUDINARY_CLOUD_NAME &&
-    process.env.CLOUDINARY_API_KEY &&
-    process.env.CLOUDINARY_API_SECRET,
-  );
-function uploadFile(file) {
-  if (!configured())
-    return Promise.reject(
-      Object.assign(new Error("STORAGE_NOT_CONFIGURED"), { status: 503 }),
-    );
-  cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
-  });
-  const resourceType = file.mimetype.startsWith("image/")
-    ? "image"
-    : file.mimetype.startsWith("video/")
-      ? "video"
-      : "raw";
-  return new Promise((resolve, reject) => {
-    const stream = cloudinary.uploader.upload_stream(
-      { resource_type: resourceType, folder: "sattva-submissions" },
-      (error, result) =>
-        error
-          ? reject(error)
-          : resolve({
-              url: result.secure_url,
-              publicId: result.public_id,
-              mimeType: file.mimetype,
-              bytes: file.size,
-            }),
-    );
-    stream.end(file.buffer);
-  });
-}
+const configured = () => Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET);
+function uploadFile(file) { if (!configured()) return Promise.reject(Object.assign(new Error("STORAGE_NOT_CONFIGURED"), { status: 503 })); cloudinary.config({ cloud_name: process.env.CLOUDINARY_CLOUD_NAME, api_key: process.env.CLOUDINARY_API_KEY, api_secret: process.env.CLOUDINARY_API_SECRET }); const resourceType = file.mimetype.startsWith("image/") ? "image" : file.mimetype.startsWith("video/") ? "video" : "raw"; return new Promise((resolve, reject) => { const stream = cloudinary.uploader.upload_stream({ resource_type: resourceType, folder: "deepcheck-submissions" }, (error, result) => error ? reject(error) : resolve({ url: result.secure_url, publicId: result.public_id, mimeType: file.mimetype, bytes: file.size })); stream.end(file.buffer); }); }
 module.exports = { uploadFile };
