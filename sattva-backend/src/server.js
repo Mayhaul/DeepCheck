@@ -8,6 +8,7 @@ const mongoose = require("mongoose");
 const helmet = require("helmet");
 const cors = require("cors");
 const controllers = require("./controllers");
+const { checkGemini } = require("./services");
 const { upload, errorHandler, checkSubmission } = require("./middleware");
 
 const app = express();
@@ -23,8 +24,30 @@ app.get("/api/health", (req, res) => {
     demoMode: process.env.DEMO_MODE === "true",
     database: mongoose.connection.readyState === 1 ? "connected" : "unavailable",
     webSearch: Boolean(process.env.TAVILY_API_KEY),
-    gemini: Boolean(process.env.GEMINI_API_KEY),
+    gemini: Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY),
   });
+});
+
+app.get("/api/health/gemini", async (req, res) => {
+  try {
+    const result = await checkGemini();
+    res.json({ success: true, ...result });
+  } catch (error) {
+    console.error("Gemini health check failed:", {
+      name: error.name,
+      message: error.message,
+      code: error.code,
+      status: error.status,
+      statusText: error.statusText,
+    });
+    res.status(503).json({
+      success: false,
+      error: "GEMINI_UNAVAILABLE",
+      message: error.message,
+      code: error.code || null,
+      status: error.status || null,
+    });
+  }
 });
 
 app.post("/api/submissions", upload.single("file"), checkSubmission, controllers.submit);
