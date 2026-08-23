@@ -3,18 +3,39 @@ const { GoogleGenAI } = require("@google/genai");
 const cheerio = require("cheerio");
 const { unavailable } = require("./utils");
 
+const GEMINI_GENERATION_MODEL = "gemini-3.7-flash";
+const GEMINI_EMBEDDING_MODEL = "gemini-embedding-001";
+
 const forensicModel = {
   provider: "huggingface",
   name: "dima806/deepfake_vs_real_image_detection",
 };
 
-function getGeminiClient() {
-  if (!process.env.GEMINI_API_KEY) {
+function getGeminiApiKey() {
+  const key = String(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "").trim();
+  if (!key) {
     throw Object.assign(new Error("GEMINI_API_KEY is required"), {
       code: "GEMINI_NOT_CONFIGURED",
     });
   }
-  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  return key;
+}
+
+function getGeminiClient() {
+  return new GoogleGenAI({ apiKey: getGeminiApiKey() });
+}
+
+async function checkGemini() {
+  const ai = getGeminiClient();
+  const result = await ai.models.generateContent({
+    model: GEMINI_GENERATION_MODEL,
+    contents: "Reply with exactly: OK",
+    config: { maxOutputTokens: 8 },
+  });
+  if (!result?.text?.trim()) {
+    throw new Error("Gemini returned an empty response");
+  }
+  return { available: true, model: GEMINI_GENERATION_MODEL };
 }
 
 async function analyzeMedia(fileUrl) {
@@ -80,7 +101,7 @@ async function analyzeMedia(fileUrl) {
 async function generateEmbedding(text) {
   const ai = getGeminiClient();
   const result = await ai.models.embedContent({
-    model: "gemini-embedding-2",
+    model: GEMINI_EMBEDDING_MODEL,
     contents: text,
     config: { outputDimensionality: 1536 },
   });
@@ -165,7 +186,7 @@ ${JSON.stringify(transcript)}
 Return verdict, claimCredibility (0-100), evidenceAgreement (0-100), summary, reasoning (array), evidenceTrail (array). Verdict must be SUPPORTED, LIKELY_FALSE, MIXED, or INSUFFICIENT_EVIDENCE.`;
 
     const result = await ai.models.generateContent({
-      model: "gemini-3.7-flash",
+      model: GEMINI_GENERATION_MODEL,
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -177,7 +198,18 @@ Return verdict, claimCredibility (0-100), evidenceAgreement (0-100), summary, re
             evidenceAgreement: { type: "number" },
             summary: { type: "string" },
             reasoning: { type: "array", items: { type: "string" } },
-            evidenceTrail: { type: "array", items: { type: "object" } },
+            evidenceTrail: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  type: { type: "string" },
+                  description: { type: "string" },
+                  confidence: { type: "number" },
+                  relationship: { type: "string" },
+                },
+              },
+            },
           },
           required: [
             "verdict",
@@ -212,7 +244,7 @@ Return verdict, claimCredibility (0-100), evidenceAgreement (0-100), summary, re
       summary:
         "Evidence synthesis could not be completed. The available evidence is shown without a definitive conclusion.",
       reasoning: [
-        "Gemini synthesis was unavailable. Check the backend logs for the underlying API error.",
+        `Gemini synthesis was unavailable: ${error.message || "unknown error"}`,
       ],
       evidenceTrail: [],
     };
@@ -221,6 +253,7 @@ Return verdict, claimCredibility (0-100), evidenceAgreement (0-100), summary, re
 
 module.exports = {
   analyzeMedia,
+  checkGemini,
   generateEmbedding,
   extractUrl,
   synthesize,
